@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stocks, dailyPrices, stockMetrics } from "@/lib/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
@@ -10,38 +12,29 @@ export async function GET(request: Request) {
     const sortBy = searchParams.get("sortBy") || "symbol";
     const order = searchParams.get("order") || "asc";
 
-    let query = db.select().from(stocks);
+    const allStocks = sector
+      ? await db.select().from(stocks).where(eq(stocks.sector, sector))
+      : await db.select().from(stocks);
 
-    if (sector) {
-      query = db.select().from(stocks).where(sql`${stocks.sector} = ${sector}`) as any;
-    }
+    // Latest price/metric per stock in two queries rather than 2N queries.
+    const latestPrices = await db
+      .selectDistinctOn([dailyPrices.stockId])
+      .from(dailyPrices)
+      .orderBy(dailyPrices.stockId, desc(dailyPrices.date));
 
-    const allStocks = await query;
+    const latestMetrics = await db
+      .selectDistinctOn([stockMetrics.stockId])
+      .from(stockMetrics)
+      .orderBy(stockMetrics.stockId, desc(stockMetrics.date));
 
-    // Fetch latest price and metric for each stock
-    const stocksWithData = await Promise.all(
-      allStocks.map(async (stock) => {
-        const latestPrice = await db
-          .select()
-          .from(dailyPrices)
-          .where(eq(dailyPrices.stockId, stock.stockId))
-          .orderBy(desc(dailyPrices.date))
-          .limit(1);
+    const priceByStock = new Map(latestPrices.map((p) => [p.stockId, p]));
+    const metricByStock = new Map(latestMetrics.map((m) => [m.stockId, m]));
 
-        const latestMetric = await db
-          .select()
-          .from(stockMetrics)
-          .where(eq(stockMetrics.stockId, stock.stockId))
-          .orderBy(desc(stockMetrics.date))
-          .limit(1);
-
-        return {
-          ...stock,
-          latestPrice: latestPrice[0] || null,
-          latestMetric: latestMetric[0] || null,
-        };
-      })
-    );
+    const stocksWithData = allStocks.map((stock) => ({
+      ...stock,
+      latestPrice: priceByStock.get(stock.stockId) ?? null,
+      latestMetric: metricByStock.get(stock.stockId) ?? null,
+    }));
 
     // Sort
     const sorted = stocksWithData.sort((a, b) => {

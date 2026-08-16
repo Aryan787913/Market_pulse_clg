@@ -1,37 +1,35 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stocks, dailyPrices, stockMetrics, pipelineRuns } from "@/lib/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { desc } from "drizzle-orm";
+
+// Market data changes per pipeline run; never cache at build time.
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const allStocks = await db.select().from(stocks);
     const totalStocks = allStocks.length;
 
-    // Get latest prices and metrics for all stocks
-    const stocksWithData = await Promise.all(
-      allStocks.map(async (stock) => {
-        const latestPrice = await db
-          .select()
-          .from(dailyPrices)
-          .where(eq(dailyPrices.stockId, stock.stockId))
-          .orderBy(desc(dailyPrices.date))
-          .limit(1);
+    // Latest price/metric per stock in two queries rather than 2N queries.
+    const latestPrices = await db
+      .selectDistinctOn([dailyPrices.stockId])
+      .from(dailyPrices)
+      .orderBy(dailyPrices.stockId, desc(dailyPrices.date));
 
-        const latestMetric = await db
-          .select()
-          .from(stockMetrics)
-          .where(eq(stockMetrics.stockId, stock.stockId))
-          .orderBy(desc(stockMetrics.date))
-          .limit(1);
+    const latestMetrics = await db
+      .selectDistinctOn([stockMetrics.stockId])
+      .from(stockMetrics)
+      .orderBy(stockMetrics.stockId, desc(stockMetrics.date));
 
-        return {
-          ...stock,
-          latestPrice: latestPrice[0] || null,
-          latestMetric: latestMetric[0] || null,
-        };
-      })
-    );
+    const priceByStock = new Map(latestPrices.map((p) => [p.stockId, p]));
+    const metricByStock = new Map(latestMetrics.map((m) => [m.stockId, m]));
+
+    const stocksWithData = allStocks.map((stock) => ({
+      ...stock,
+      latestPrice: priceByStock.get(stock.stockId) ?? null,
+      latestMetric: metricByStock.get(stock.stockId) ?? null,
+    }));
 
     // Top gainers (sorted by percent change desc)
     const topGainers = [...stocksWithData]

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stocks, dailyPrices, stockMetrics } from "@/lib/db/schema";
-import { eq, desc, sql, or, ilike } from "drizzle-orm";
+import { and, desc, eq, or, ilike, type SQL } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
@@ -16,66 +18,63 @@ export async function GET(request: Request) {
       return NextResponse.json({ stocks: [] });
     }
 
-    let conditions = [];
+    const conditions: SQL[] = [];
 
     if (query) {
-      conditions.push(
-        or(
-          ilike(stocks.symbol, `%${query}%`),
-          ilike(stocks.companyName, `%${query}%`)
-        )
+      const clause = or(
+        ilike(stocks.symbol, `%${query}%`),
+        ilike(stocks.companyName, `%${query}%`)
       );
+      if (clause) conditions.push(clause);
     }
 
     if (sector) {
-      conditions.push(sql`${stocks.sector} = ${sector}`);
+      conditions.push(eq(stocks.sector, sector));
     }
 
-    let stockQuery = db.select().from(stocks);
-    if (conditions.length > 0) {
-      stockQuery = db.select().from(stocks).where(conditions[0]) as any;
-      for (let i = 1; i < conditions.length; i++) {
-        stockQuery = stockQuery.where(conditions[i]) as any;
-      }
-    }
+    const results = conditions.length > 0
+      ? await db.select().from(stocks).where(and(...conditions))
+      : await db.select().from(stocks);
 
-    const results = await stockQuery;
+    // Latest price/metric per stock in two queries rather than 2N queries.
+    const latestPrices = await db
+      .selectDistinctOn([dailyPrices.stockId])
+      .from(dailyPrices)
+      .orderBy(dailyPrices.stockId, desc(dailyPrices.date));
 
-    // Fetch latest data for filtering
-    const stocksWithData = await Promise.all(
-      results.map(async (stock) => {
-        const latestPrice = await db
-          .select()
-          .from(dailyPrices)
-          .where(eq(dailyPrices.stockId, stock.stockId))
-          .orderBy(desc(dailyPrices.date))
-          .limit(1);
+    const latestMetrics = await db
+      .selectDistinctOn([stockMetrics.stockId])
+      .from(stockMetrics)
+      .orderBy(stockMetrics.stockId, desc(stockMetrics.date));
 
-        const latestMetric = await db
-          .select()
-          .from(stockMetrics)
-          .where(eq(stockMetrics.stockId, stock.stockId))
-          .orderBy(desc(stockMetrics.date))
-          .limit(1);
+    const priceByStock = new Map(latestPrices.map((p) => [p.stockId, p]));
+    const metricByStock = new Map(latestMetrics.map((m) => [m.stockId, m]));
 
-        return {
-          ...stock,
-          latestPrice: latestPrice[0] || null,
-          latestMetric: latestMetric[0] || null,
-        };
-      })
-    );
+    const stocksWithData = results.map((stock) => ({
+      ...stock,
+      latestPrice: priceByStock.get(stock.stockId) ?? null,
+      latestMetric: metricByStock.get(stock.stockId) ?? null,
+    }));
 
     // Apply price and volume filters
     let filtered = stocksWithData;
     if (minPrice) {
-      filtered = filtered.filter((s) => parseFloat(s.latestPrice?.close || "0") >= parseFloat(minPrice));
+      const min = parseFloat(minPrice);
+      if (Number.isFinite(min)) {
+        filtered = filtered.filter((s) => parseFloat(s.latestPrice?.close || "0") >= min);
+      }
     }
     if (maxPrice) {
-      filtered = filtered.filter((s) => parseFloat(s.latestPrice?.close || "0") <= parseFloat(maxPrice));
+      const max = parseFloat(maxPrice);
+      if (Number.isFinite(max)) {
+        filtered = filtered.filter((s) => parseFloat(s.latestPrice?.close || "0") <= max);
+      }
     }
     if (minVolume) {
-      filtered = filtered.filter((s) => (s.latestPrice?.volume || 0) >= parseInt(minVolume));
+      const min = parseInt(minVolume, 10);
+      if (Number.isFinite(min)) {
+        filtered = filtered.filter((s) => (s.latestPrice?.volume || 0) >= min);
+      }
     }
 
     return NextResponse.json({ stocks: filtered });

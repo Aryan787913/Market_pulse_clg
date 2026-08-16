@@ -88,8 +88,10 @@ export function StockTable({ stocks, showWatchlistActions, onRemove }: StockTabl
           </thead>
           <tbody>
             {sorted.map((stock) => {
-              const change = parseFloat(stock.latestMetric?.percentChange || "0");
-              const isPositive = change >= 0;
+              const change = stock.latestMetric?.percentChange
+                ? parseFloat(stock.latestMetric.percentChange)
+                : null;
+              const isPositive = (change ?? 0) >= 0;
 
               return (
                 <tr key={stock.stockId} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
@@ -108,10 +110,14 @@ export function StockTable({ stocks, showWatchlistActions, onRemove }: StockTabl
                     {formatCurrency(stock.latestPrice?.close)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <div className={`flex items-center justify-end gap-1 ${isPositive ? "text-emerald-500" : "text-red-500"}`}>
-                      {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                      <span className="font-medium">{formatPercent(change)}</span>
-                    </div>
+                    {change === null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <div className={`flex items-center justify-end gap-1 ${isPositive ? "text-emerald-500" : "text-red-500"}`}>
+                        {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                        <span className="font-medium">{formatPercent(change)}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right hidden lg:table-cell text-muted-foreground">
                     {formatNumber(stock.latestPrice?.volume)}

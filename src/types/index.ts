@@ -34,8 +34,8 @@ export interface StockMetric {
 }
 
 export interface StockWithPrice extends Stock {
-  latestPrice?: DailyPrice;
-  latestMetric?: StockMetric;
+  latestPrice?: DailyPrice | null;
+  latestMetric?: StockMetric | null;
 }
 
 export interface MarketSummary {
@@ -51,9 +51,9 @@ export interface WatchlistItem {
   userId: string;
   stockId: number;
   addedOn: Date | null;
-  stock: Stock;
-  latestPrice?: DailyPrice;
-  latestMetric?: StockMetric;
+  stock: Stock | null;
+  latestPrice?: DailyPrice | null;
+  latestMetric?: StockMetric | null;
 }
 
 export interface PipelineRun {

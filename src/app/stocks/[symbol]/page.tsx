@@ -1,13 +1,16 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { stocks, dailyPrices, stockMetrics } from "@/lib/db/schema";
-import { eq, desc, gte } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { formatCurrency, formatPercent, formatNumber, formatDate } from "@/lib/utils";
 import { PriceChart } from "@/components/price-chart";
 import { VolumeChart } from "@/components/volume-chart";
-import { TrendingUp, TrendingDown, ArrowLeft, BarChart3, Activity, Calendar } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { subDays } from "date-fns";
+
+// Stock detail pages read live data per request.
+export const dynamic = "force-dynamic";
 
 async function getStockData(symbol: string) {
   const stock = await db
@@ -20,40 +23,54 @@ async function getStockData(symbol: string) {
 
   const stockData = stock[0];
   const fromDate = subDays(new Date(), 90);
+  const fromDateStr = fromDate.toISOString().split("T")[0]!;
 
   const prices = await db
     .select()
     .from(dailyPrices)
-    .where(eq(dailyPrices.stockId, stockData.stockId))
-    .where(gte(dailyPrices.date, fromDate.toISOString().split("T")[0]))
+    .where(
+      and(
+        eq(dailyPrices.stockId, stockData.stockId),
+        gte(dailyPrices.date, fromDateStr)
+      )
+    )
     .orderBy(dailyPrices.date);
 
   const metrics = await db
     .select()
     .from(stockMetrics)
-    .where(eq(stockMetrics.stockId, stockData.stockId))
-    .where(gte(stockMetrics.date, fromDate.toISOString().split("T")[0]))
+    .where(
+      and(
+        eq(stockMetrics.stockId, stockData.stockId),
+        gte(stockMetrics.date, fromDateStr)
+      )
+    )
     .orderBy(stockMetrics.date);
 
   const latestPrice = prices[prices.length - 1] || null;
   const latestMetric = metrics[metrics.length - 1] || null;
 
-  // Calculate 52-week high/low from all available data
-  const allPrices = await db
-    .select()
-    .from(dailyPrices)
-    .where(eq(dailyPrices.stockId, stockData.stockId))
-    .orderBy(desc(dailyPrices.date));
+  // 52-week aggregates computed in SQL over the trailing year rather than by
+  // loading the full price history into memory.
+  const fromDate52w = subDays(new Date(), 365).toISOString().split("T")[0]!;
 
-  const high52w = allPrices.length > 0
-    ? Math.max(...allPrices.map((p) => parseFloat(p.high)))
-    : null;
-  const low52w = allPrices.length > 0
-    ? Math.min(...allPrices.map((p) => parseFloat(p.low)))
-    : null;
-  const avgVolume = allPrices.length > 0
-    ? allPrices.reduce((sum, p) => sum + p.volume, 0) / allPrices.length
-    : null;
+  const [aggregates] = await db
+    .select({
+      high52w: sql<string | null>`max(${dailyPrices.high})`,
+      low52w: sql<string | null>`min(${dailyPrices.low})`,
+      avgVolume: sql<string | null>`avg(${dailyPrices.volume})`,
+    })
+    .from(dailyPrices)
+    .where(
+      and(
+        eq(dailyPrices.stockId, stockData.stockId),
+        gte(dailyPrices.date, fromDate52w)
+      )
+    );
+
+  const high52w = aggregates?.high52w ? parseFloat(aggregates.high52w) : null;
+  const low52w = aggregates?.low52w ? parseFloat(aggregates.low52w) : null;
+  const avgVolume = aggregates?.avgVolume ? parseFloat(aggregates.avgVolume) : null;
 
   return {
     stock: stockData,
@@ -64,7 +81,6 @@ async function getStockData(symbol: string) {
     high52w,
     low52w,
     avgVolume,
-    totalRecords: allPrices.length,
   };
 }
 
@@ -76,8 +92,8 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
   }
 
   const { stock, prices, metrics, latestPrice, latestMetric, high52w, low52w, avgVolume } = data;
-  const change = parseFloat(latestMetric?.percentChange || "0");
-  const isPositive = change >= 0;
+  const change = latestMetric?.percentChange ? parseFloat(latestMetric.percentChange) : null;
+  const isPositive = (change ?? 0) >= 0;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -89,7 +105,6 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         Back to Dashboard
       </Link>
 
-      {/* Header */}
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -100,8 +115,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
             <p className="text-3xl font-bold">
               {formatCurrency(latestPrice?.close)}
             </p>
-            <div className={`flex items-center gap-1 ${isPositive ? "text-emerald-500" : "text-red-500"}`}>
-              {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+            <div className={`flex items-center gap-1 ${change === null ? "text-muted-foreground" : isPositive ? "text-emerald-500" : "text-red-500"}`}>
               <span className="font-medium">{formatPercent(change)}</span>
               <span className="text-muted-foreground text-sm">
                 ({formatCurrency(latestMetric?.priceChange)})
@@ -123,7 +137,6 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         </div>
       </div>
 
-      {/* Price Chart */}
       <div className="mb-8 rounded-xl border bg-card p-5 shadow-sm">
         <h2 className="text-lg font-semibold mb-4">Price History (90 Days)</h2>
         {prices.length > 0 ? (
@@ -133,7 +146,6 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         )}
       </div>
 
-      {/* Volume Chart */}
       <div className="mb-8 rounded-xl border bg-card p-5 shadow-sm">
         <h2 className="text-lg font-semibold mb-4">Trading Volume</h2>
         {prices.length > 0 ? (
@@ -143,7 +155,6 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         )}
       </div>
 
-      {/* Key Metrics */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4">Key Metrics</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -170,7 +181,9 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
           <div className="rounded-xl border bg-card p-4">
             <p className="text-xs text-muted-foreground mb-1">Daily Return</p>
             <p className={`text-lg font-semibold ${parseFloat(latestMetric?.dailyReturn || "0") >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-              {formatPercent(parseFloat(latestMetric?.dailyReturn || "0") * 100)}
+              {latestMetric?.dailyReturn
+                ? formatPercent(parseFloat(latestMetric.dailyReturn) * 100)
+                : "—"}
             </p>
           </div>
           <div className="rounded-xl border bg-card p-4">
@@ -200,7 +213,6 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         </div>
       </div>
 
-      {/* Data Source Info */}
       <div className="rounded-xl border bg-muted/30 p-4">
         <p className="text-xs text-muted-foreground">
           Data source: Yahoo Finance via yfinance. Last recorded date: {latestPrice ? formatDate(latestPrice.date) : "N/A"}.

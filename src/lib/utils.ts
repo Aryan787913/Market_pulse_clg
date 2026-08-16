@@ -5,9 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(value: number | string | null): string {
-  if (value === null || value === undefined) return "—";
+type Numeric = number | string | null | undefined;
+
+function toNumber(value: Numeric): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const num = typeof value === "string" ? parseFloat(value) : value;
+  return Number.isFinite(num) ? num : null;
+}
+
+export function formatCurrency(value: Numeric): string {
+  const num = toNumber(value);
+  if (num === null) return "—";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -16,21 +24,22 @@ export function formatCurrency(value: number | string | null): string {
   }).format(num);
 }
 
-export function formatNumber(value: number | string | null): string {
-  if (value === null || value === undefined) return "—";
-  const num = typeof value === "string" ? parseFloat(value) : value;
+export function formatNumber(value: Numeric): string {
+  const num = toNumber(value);
+  if (num === null) return "—";
   return new Intl.NumberFormat("en-IN").format(num);
 }
 
-export function formatPercent(value: number | string | null): string {
-  if (value === null || value === undefined) return "—";
-  const num = typeof value === "string" ? parseFloat(value) : value;
+export function formatPercent(value: Numeric): string {
+  const num = toNumber(value);
+  if (num === null) return "—";
   return `${num >= 0 ? "+" : ""}${num.toFixed(2)}%`;
 }
 
-export function formatDate(date: string | Date | null): string {
+export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-IN", {
     year: "numeric",
     month: "short",
@@ -38,9 +47,10 @@ export function formatDate(date: string | Date | null): string {
   });
 }
 
-export function formatDateTime(date: string | Date | null): string {
+export function formatDateTime(date: string | Date | null | undefined): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-IN", {
     year: "numeric",
     month: "short",

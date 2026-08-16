@@ -53,9 +53,11 @@ def calculate_metrics_for_stock(prices_df):
         # Volatility
         volatility = calculate_volatility(returns)
 
-        # Price change and percent change from previous day
-        price_change = current_close - previous_close if previous_close else 0
-        percent_change = daily_return if daily_return else 0
+        # Price change and percent change from previous day.
+        # daily_return is a decimal fraction; percent_change is expressed in
+        # percent (matching how the dashboard renders it).
+        price_change = current_close - previous_close if previous_close is not None else None
+        percent_change = daily_return * 100 if daily_return is not None else None
 
         metrics.append({
             "date": dates[i].date(),

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stocks, dailyPrices, stockMetrics } from "@/lib/db/schema";
-import { eq, desc, gte } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 import { subDays } from "date-fns";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: Request,
@@ -28,19 +30,28 @@ export async function GET(
 
     const stockData = stock[0];
     const fromDate = subDays(new Date(), days);
+    const fromDateStr = fromDate.toISOString().split("T")[0]!;
 
     const prices = await db
       .select()
       .from(dailyPrices)
-      .where(eq(dailyPrices.stockId, stockData.stockId))
-      .where(gte(dailyPrices.date, fromDate.toISOString().split("T")[0]))
+      .where(
+        and(
+          eq(dailyPrices.stockId, stockData.stockId),
+          gte(dailyPrices.date, fromDateStr)
+        )
+      )
       .orderBy(dailyPrices.date);
 
     const metrics = await db
       .select()
       .from(stockMetrics)
-      .where(eq(stockMetrics.stockId, stockData.stockId))
-      .where(gte(stockMetrics.date, fromDate.toISOString().split("T")[0]))
+      .where(
+        and(
+          eq(stockMetrics.stockId, stockData.stockId),
+          gte(stockMetrics.date, fromDateStr)
+        )
+      )
       .orderBy(stockMetrics.date);
 
     return NextResponse.json({

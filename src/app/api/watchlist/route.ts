@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { watchlist, stocks, dailyPrices, stockMetrics } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
@@ -21,36 +23,40 @@ export async function GET(request: Request) {
       .from(watchlist)
       .where(eq(watchlist.userId, user.id));
 
-    const watchlistWithData = await Promise.all(
-      items.map(async (item) => {
-        const stockData = await db
-          .select()
-          .from(stocks)
-          .where(eq(stocks.stockId, item.stockId))
-          .limit(1);
+    if (items.length === 0) {
+      return NextResponse.json({ watchlist: [] });
+    }
 
-        const latestPrice = await db
-          .select()
-          .from(dailyPrices)
-          .where(eq(dailyPrices.stockId, item.stockId))
-          .orderBy(desc(dailyPrices.date))
-          .limit(1);
+    const stockIds = items.map((item) => item.stockId);
 
-        const latestMetric = await db
-          .select()
-          .from(stockMetrics)
-          .where(eq(stockMetrics.stockId, item.stockId))
-          .orderBy(desc(stockMetrics.date))
-          .limit(1);
+    // Resolve stock rows and their latest price/metric in three queries.
+    const stockRows = await db
+      .select()
+      .from(stocks)
+      .where(inArray(stocks.stockId, stockIds));
 
-        return {
-          ...item,
-          stock: stockData[0] || null,
-          latestPrice: latestPrice[0] || null,
-          latestMetric: latestMetric[0] || null,
-        };
-      })
-    );
+    const latestPrices = await db
+      .selectDistinctOn([dailyPrices.stockId])
+      .from(dailyPrices)
+      .where(inArray(dailyPrices.stockId, stockIds))
+      .orderBy(dailyPrices.stockId, desc(dailyPrices.date));
+
+    const latestMetrics = await db
+      .selectDistinctOn([stockMetrics.stockId])
+      .from(stockMetrics)
+      .where(inArray(stockMetrics.stockId, stockIds))
+      .orderBy(stockMetrics.stockId, desc(stockMetrics.date));
+
+    const stockById = new Map(stockRows.map((s) => [s.stockId, s]));
+    const priceByStock = new Map(latestPrices.map((p) => [p.stockId, p]));
+    const metricByStock = new Map(latestMetrics.map((m) => [m.stockId, m]));
+
+    const watchlistWithData = items.map((item) => ({
+      ...item,
+      stock: stockById.get(item.stockId) ?? null,
+      latestPrice: priceByStock.get(item.stockId) ?? null,
+      latestMetric: metricByStock.get(item.stockId) ?? null,
+    }));
 
     return NextResponse.json({ watchlist: watchlistWithData });
   } catch (error) {
@@ -75,11 +81,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { stockId } = body;
+    const stockId = Number(body?.stockId);
 
-    if (!stockId) {
+    if (!Number.isInteger(stockId) || stockId <= 0) {
       return NextResponse.json(
-        { error: "Stock ID is required" },
+        { error: "A valid stock ID is required" },
         { status: 400 }
       );
     }
@@ -87,13 +93,32 @@ export async function POST(request: Request) {
     const existing = await db
       .select()
       .from(watchlist)
-      .where(eq(watchlist.userId, user.id))
-      .where(eq(watchlist.stockId, stockId));
+      .where(
+        and(
+          eq(watchlist.userId, user.id),
+          eq(watchlist.stockId, stockId)
+        )
+      );
 
     if (existing.length > 0) {
       return NextResponse.json(
         { error: "Stock already in watchlist" },
         { status: 409 }
+      );
+    }
+
+    // Reject unknown stock IDs up front so the FK violation never surfaces
+    // as an opaque 500.
+    const stockExists = await db
+      .select({ stockId: stocks.stockId })
+      .from(stocks)
+      .where(eq(stocks.stockId, stockId))
+      .limit(1);
+
+    if (stockExists.length === 0) {
+      return NextResponse.json(
+        { error: "Stock not found" },
+        { status: 404 }
       );
     }
 
@@ -128,19 +153,24 @@ export async function DELETE(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const stockId = searchParams.get("stockId");
+    const stockIdParam = searchParams.get("stockId");
+    const stockId = Number(stockIdParam);
 
-    if (!stockId) {
+    if (!stockIdParam || !Number.isInteger(stockId) || stockId <= 0) {
       return NextResponse.json(
-        { error: "Stock ID is required" },
+        { error: "A valid stock ID is required" },
         { status: 400 }
       );
     }
 
     await db
       .delete(watchlist)
-      .where(eq(watchlist.userId, user.id))
-      .where(eq(watchlist.stockId, parseInt(stockId)));
+      .where(
+        and(
+          eq(watchlist.userId, user.id),
+          eq(watchlist.stockId, stockId)
+        )
+      );
 
     return NextResponse.json({ success: true });
   } catch (error) {
