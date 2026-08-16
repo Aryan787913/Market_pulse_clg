@@ -1,0 +1,34 @@
+name: Keep Database Awake
+
+# Supabase free-tier projects pause after 7 days of inactivity. The data pipeline
+# only runs on weekdays, so a long weekend or holiday break can exceed that window
+# and break the site. This workflow opens a single connection every day (including
+# weekends) which counts as activity and keeps the project from pausing.
+on:
+  schedule:
+    # Run daily at 1:45 PM UTC (7:15 PM IST), just after the weekday pipeline.
+    - cron: '45 13 * * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Ping database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          pip install -q "psycopg[binary]" >/dev/null
+          python - <<'PY'
+          import os
+          from psycopg import connect
+          with connect(os.environ["DATABASE_URL"], connect_timeout=15) as conn:
+              with conn.cursor() as cur:
+                  cur.execute("SELECT 1")
+                  print("keepalive ok:", cur.fetchone())
+          PY
