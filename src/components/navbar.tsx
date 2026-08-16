@@ -12,7 +12,7 @@ import {
   LogOut,
   Menu,
   X,
-  User,
+  Newspaper,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +48,7 @@ export function Navbar() {
   const navLinks = [
     { href: "/", label: "Dashboard", icon: TrendingUp },
     { href: "/search", label: "Search", icon: Search },
+    { href: "/news", label: "News", icon: Newspaper },
   ];
 
   const authLinks = user

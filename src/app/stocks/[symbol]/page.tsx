@@ -1,10 +1,18 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { stocks, dailyPrices, stockMetrics } from "@/lib/db/schema";
-import { and, eq, gte, sql } from "drizzle-orm";
+import {
+  stocks,
+  dailyPrices,
+  stockMetrics,
+  stockForecasts,
+  modelEvaluations,
+} from "@/lib/db/schema";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { formatCurrency, formatPercent, formatNumber, formatDate } from "@/lib/utils";
 import { PriceChart } from "@/components/price-chart";
 import { VolumeChart } from "@/components/volume-chart";
+import { ForecastChart } from "@/components/forecast-chart";
+import { ModelMetrics } from "@/components/model-metrics";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { subDays } from "date-fns";
@@ -72,6 +80,41 @@ async function getStockData(symbol: string) {
   const low52w = aggregates?.low52w ? parseFloat(aggregates.low52w) : null;
   const avgVolume = aggregates?.avgVolume ? parseFloat(aggregates.avgVolume) : null;
 
+  // Only show output from the most recent training run so forecasts from
+  // different runs are never mixed on the same chart.
+  const [latestRun] = await db
+    .select({ trainedOn: stockForecasts.trainedOn })
+    .from(stockForecasts)
+    .where(eq(stockForecasts.stockId, stockData.stockId))
+    .orderBy(desc(stockForecasts.trainedOn))
+    .limit(1);
+
+  const forecasts = latestRun
+    ? await db
+        .select()
+        .from(stockForecasts)
+        .where(
+          and(
+            eq(stockForecasts.stockId, stockData.stockId),
+            eq(stockForecasts.trainedOn, latestRun.trainedOn)
+          )
+        )
+        .orderBy(stockForecasts.targetDate)
+    : [];
+
+  const evaluations = latestRun
+    ? await db
+        .select()
+        .from(modelEvaluations)
+        .where(
+          and(
+            eq(modelEvaluations.stockId, stockData.stockId),
+            eq(modelEvaluations.trainedOn, latestRun.trainedOn)
+          )
+        )
+        .orderBy(modelEvaluations.modelName)
+    : [];
+
   return {
     stock: stockData,
     prices,
@@ -81,6 +124,9 @@ async function getStockData(symbol: string) {
     high52w,
     low52w,
     avgVolume,
+    forecasts,
+    evaluations,
+    forecastTrainedOn: latestRun?.trainedOn ?? null,
   };
 }
 
@@ -91,7 +137,19 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     notFound();
   }
 
-  const { stock, prices, metrics, latestPrice, latestMetric, high52w, low52w, avgVolume } = data;
+  const {
+    stock,
+    prices,
+    metrics,
+    latestPrice,
+    latestMetric,
+    high52w,
+    low52w,
+    avgVolume,
+    forecasts,
+    evaluations,
+    forecastTrainedOn,
+  } = data;
   const change = latestMetric?.percentChange ? parseFloat(latestMetric.percentChange) : null;
   const isPositive = (change ?? 0) >= 0;
 
@@ -154,6 +212,41 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
           <p className="text-muted-foreground text-sm">No volume data available.</p>
         )}
       </div>
+
+      <section className="mb-8" aria-labelledby="forecast-heading">
+        <div className="mb-4">
+          <h2 id="forecast-heading" className="text-lg font-semibold">
+            Price Forecast (5 Trading Days)
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            ARIMA and XGBoost projections
+            {forecastTrainedOn
+              ? ` trained on data through ${formatDate(forecastTrainedOn)}`
+              : ""}
+            . Statistical extrapolation for academic purposes, not investment advice.
+          </p>
+        </div>
+
+        {forecasts.length > 0 ? (
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-card p-5 shadow-sm">
+              <ForecastChart prices={prices} forecasts={forecasts} />
+            </div>
+            <ModelMetrics
+              evaluations={evaluations}
+              forecasts={forecasts}
+              lastClose={latestPrice?.close ?? null}
+            />
+          </div>
+        ) : (
+          <div className="rounded-xl border bg-card p-5">
+            <p className="text-sm text-muted-foreground">
+              No forecast available yet. Models need at least 60 trading days of
+              history; run the pipeline to generate projections.
+            </p>
+          </div>
+        )}
+      </section>
 
       <div className="mb-8">
         <h2 className="text-lg font-semibold mb-4">Key Metrics</h2>

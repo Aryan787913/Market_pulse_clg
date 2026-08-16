@@ -13,9 +13,14 @@ from config import STOCKS, DATABASE_URL
 from database import Database
 from validator import DataValidator
 from metrics import calculate_metrics_for_stock
+from forecast import run_models, FORECAST_HORIZON
 
-def fetch_stock_data(symbol, period="6mo"):
-    """Fetch historical stock data from Yahoo Finance"""
+def fetch_stock_data(symbol, period="2y"):
+    """Fetch historical stock data from Yahoo Finance.
+
+    Two years gives the forecasting models enough observations to train on and
+    makes the 52-week high/low genuinely reflect 52 weeks.
+    """
     try:
         ticker = yf.Ticker(symbol)
         data = ticker.history(period=period)
@@ -124,6 +129,68 @@ def run_pipeline():
             
             db.insert_stock_metrics_batch(metric_records)
             print(f"    Calculated {len(metric_records)} metrics")
+
+            # Step 5: Fit forecasting models and record their backtested error
+            try:
+                trained_on = data.index[-1].date()
+                model_output = run_models(data, horizon=FORECAST_HORIZON)
+
+                if model_output["skipped"]:
+                    print(f"    Forecast skipped: {model_output['skipped']}")
+                else:
+                    forecast_records = []
+                    for result in model_output["forecasts"]:
+                        for step, target_date in enumerate(result["target_dates"], start=1):
+                            lower = result["lower"][step - 1]
+                            upper = result["upper"][step - 1]
+                            forecast_records.append((
+                                stock_id,
+                                result["model_name"],
+                                trained_on,
+                                target_date,
+                                step,
+                                round(result["predictions"][step - 1], 2),
+                                round(lower, 2) if lower is not None else None,
+                                round(upper, 2) if upper is not None else None,
+                            ))
+
+                    db.insert_forecasts_batch(forecast_records)
+
+                    evaluation_records = []
+                    for ev in model_output["evaluations"]:
+                        evaluation_records.append((
+                            stock_id,
+                            ev["model_name"],
+                            trained_on,
+                            ev["train_size"],
+                            ev["test_size"],
+                            round(ev["mae"], 4) if ev["mae"] is not None else None,
+                            round(ev["rmse"], 4) if ev["rmse"] is not None else None,
+                            round(ev["mape"], 4) if ev["mape"] is not None else None,
+                            round(ev["directional_accuracy"], 4) if ev["directional_accuracy"] is not None else None,
+                            round(ev["naive_rmse"], 4) if ev["naive_rmse"] is not None else None,
+                            ev["params"],
+                        ))
+
+                    db.insert_evaluations_batch(evaluation_records)
+                    db.prune_old_forecasts(stock_id, trained_on)
+
+                    model_names = ", ".join(r["model_name"] for r in model_output["forecasts"])
+                    print(f"    Forecast {len(forecast_records)} points ({model_names or 'none'})")
+
+                    for ev in model_output["evaluations"]:
+                        skill = ""
+                        if ev["rmse"] and ev["naive_rmse"]:
+                            better = ev["rmse"] < ev["naive_rmse"]
+                            skill = " beats naive" if better else " WORSE than naive"
+                        mape = f"{ev['mape']:.2f}%" if ev["mape"] is not None else "n/a"
+                        print(f"      {ev['model_name']}: MAPE {mape}{skill}")
+            except Exception as exc:
+                # Forecasting is supplementary; never let it kill ingestion.
+                forecast_error = f"Forecast failed for {symbol}: {exc}"
+                print(f"    {forecast_error}")
+                all_errors.append(forecast_error)
+                db.log_data_quality(run_id, stock_id, "FORECAST", "fail", str(exc)[:500])
             
             # Log success
             db.log_data_quality(run_id, stock_id, "PIPELINE", "pass", 

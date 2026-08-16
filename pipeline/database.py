@@ -142,3 +142,76 @@ class Database:
         except Exception as e:
             self.rollback()
             # Don't raise - data quality logging should not break the pipeline
+
+    def insert_forecasts_batch(self, records):
+        """Batch insert model forecasts.
+
+        Records are (stock_id, model_name, trained_on, target_date, horizon,
+        predicted_close, lower_bound, upper_bound).
+        """
+        if not records:
+            return
+        try:
+            execute_values(
+                self.cur,
+                """INSERT INTO stock_forecasts
+                   (stock_id, model_name, trained_on, target_date, horizon,
+                    predicted_close, lower_bound, upper_bound)
+                   VALUES %s
+                   ON CONFLICT (stock_id, model_name, trained_on, target_date)
+                   DO UPDATE SET
+                       horizon = EXCLUDED.horizon,
+                       predicted_close = EXCLUDED.predicted_close,
+                       lower_bound = EXCLUDED.lower_bound,
+                       upper_bound = EXCLUDED.upper_bound
+                """,
+                records
+            )
+            self.conn.commit()
+        except Exception as e:
+            self.rollback()
+            raise e
+
+    def insert_evaluations_batch(self, records):
+        """Batch insert walk-forward backtest metrics.
+
+        Records are (stock_id, model_name, trained_on, train_size, test_size,
+        mae, rmse, mape, directional_accuracy, naive_rmse, params).
+        """
+        if not records:
+            return
+        try:
+            execute_values(
+                self.cur,
+                """INSERT INTO model_evaluations
+                   (stock_id, model_name, trained_on, train_size, test_size,
+                    mae, rmse, mape, directional_accuracy, naive_rmse, params)
+                   VALUES %s
+                   ON CONFLICT (stock_id, model_name, trained_on)
+                   DO UPDATE SET
+                       train_size = EXCLUDED.train_size,
+                       test_size = EXCLUDED.test_size,
+                       mae = EXCLUDED.mae,
+                       rmse = EXCLUDED.rmse,
+                       mape = EXCLUDED.mape,
+                       directional_accuracy = EXCLUDED.directional_accuracy,
+                       naive_rmse = EXCLUDED.naive_rmse,
+                       params = EXCLUDED.params
+                """,
+                records
+            )
+            self.conn.commit()
+        except Exception as e:
+            self.rollback()
+            raise e
+
+    def prune_old_forecasts(self, stock_id, keep_trained_on):
+        """Drop superseded forecast runs so the table does not grow unbounded."""
+        try:
+            self.cur.execute(
+                "DELETE FROM stock_forecasts WHERE stock_id = %s AND trained_on < %s",
+                (stock_id, keep_trained_on)
+            )
+            self.conn.commit()
+        except Exception:
+            self.rollback()

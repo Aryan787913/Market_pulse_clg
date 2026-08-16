@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { UserPlus, Mail, Lock, User, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { GoogleButton } from "@/components/google-button";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -79,6 +80,19 @@ export default function RegisterPage() {
             {error}
           </div>
         )}
+
+        <GoogleButton next="/" onError={setError} />
+
+        <div className="relative my-5">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center">
+            <span className="bg-card px-2 text-xs uppercase text-muted-foreground">
+              Or sign up with email
+            </span>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

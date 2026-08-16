@@ -2,15 +2,22 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { LogIn, Mail, Lock, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { GoogleButton } from "@/components/google-button";
 
 export default function LoginPage() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
+
+  // The OAuth callback redirects back here with ?error= when the provider or
+  // the code exchange fails.
+  const displayedError = error || searchParams.get("error") || "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,11 +53,24 @@ export default function LoginPage() {
           <p className="text-sm text-muted-foreground mt-1">Log in to your MarketPulse account</p>
         </div>
 
-        {error && (
+        {displayedError && (
           <div className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
+            {displayedError}
           </div>
         )}
+
+        <GoogleButton next="/" onError={setError} />
+
+        <div className="relative my-5">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center">
+            <span className="bg-card px-2 text-xs uppercase text-muted-foreground">
+              Or continue with email
+            </span>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

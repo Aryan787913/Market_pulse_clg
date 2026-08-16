@@ -76,3 +76,41 @@ export interface DataQualityResult {
   details: string | null;
   createdAt: Date | null;
 }
+
+export interface StockForecast {
+  forecastId: number;
+  stockId: number;
+  modelName: string;
+  trainedOn: string;
+  targetDate: string;
+  horizon: number;
+  predictedClose: string;
+  lowerBound: string | null;
+  upperBound: string | null;
+  createdAt: Date | null;
+}
+
+export interface ModelEvaluation {
+  evaluationId: number;
+  stockId: number;
+  modelName: string;
+  trainedOn: string;
+  trainSize: number;
+  testSize: number;
+  mae: string | null;
+  rmse: string | null;
+  mape: string | null;
+  directionalAccuracy: string | null;
+  naiveRmse: string | null;
+  params: string | null;
+  createdAt: Date | null;
+}
+
+export interface NewsArticle {
+  title: string;
+  link: string;
+  source: string;
+  publishedAt: string | null;
+  /** Symbols this article was matched to, when known. */
+  symbols: string[];
+}

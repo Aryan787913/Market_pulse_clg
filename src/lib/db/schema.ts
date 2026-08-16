@@ -77,3 +77,45 @@ export const dataQualityResults = pgTable("data_quality_results", {
   details: varchar("details", { length: 500 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
+
+export const stockForecasts = pgTable("stock_forecasts", {
+  forecastId: serial("forecast_id").primaryKey(),
+  stockId: integer("stock_id").notNull().references(() => stocks.stockId, { onDelete: "cascade" }),
+  modelName: varchar("model_name", { length: 30 }).notNull(),
+  trainedOn: date("trained_on").notNull(),
+  targetDate: date("target_date").notNull(),
+  horizon: integer("horizon").notNull(),
+  predictedClose: numeric("predicted_close", { precision: 12, scale: 2 }).notNull(),
+  lowerBound: numeric("lower_bound", { precision: 12, scale: 2 }),
+  upperBound: numeric("upper_bound", { precision: 12, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueForecast: uniqueIndex("unique_forecast").on(
+    table.stockId,
+    table.modelName,
+    table.trainedOn,
+    table.targetDate
+  ),
+}));
+
+export const modelEvaluations = pgTable("model_evaluations", {
+  evaluationId: serial("evaluation_id").primaryKey(),
+  stockId: integer("stock_id").notNull().references(() => stocks.stockId, { onDelete: "cascade" }),
+  modelName: varchar("model_name", { length: 30 }).notNull(),
+  trainedOn: date("trained_on").notNull(),
+  trainSize: integer("train_size").notNull(),
+  testSize: integer("test_size").notNull(),
+  mae: numeric("mae", { precision: 12, scale: 4 }),
+  rmse: numeric("rmse", { precision: 12, scale: 4 }),
+  mape: numeric("mape", { precision: 10, scale: 4 }),
+  directionalAccuracy: numeric("directional_accuracy", { precision: 10, scale: 4 }),
+  naiveRmse: numeric("naive_rmse", { precision: 12, scale: 4 }),
+  params: varchar("params", { length: 300 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueEvaluation: uniqueIndex("unique_evaluation").on(
+    table.stockId,
+    table.modelName,
+    table.trainedOn
+  ),
+}));

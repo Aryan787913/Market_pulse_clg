@@ -14,8 +14,19 @@ User Browser
   Supabase PostgreSQL
      ^
      |
-GitHub Actions (Python + yfinance)
+GitHub Actions (Python + yfinance + statsmodels/XGBoost)
 ```
+
+## Features
+
+- Market dashboard with per-stock latest price, change and volume
+- Per-stock detail pages with 90-day price/volume charts and key metrics
+- Price forecasting using ARIMA and XGBoost, reported alongside walk-forward
+  backtest error and a random-walk skill comparison
+- Stock news page aggregating publisher RSS headlines, filterable by symbol
+- Email/password and Google (OAuth) authentication via Supabase
+- Watchlist for authenticated users
+
 
 ## Cost
 
@@ -44,6 +55,7 @@ The project is designed to operate at ₹0/month using free-tier/free services, 
 3. Open **SQL Editor** → **New Query**
 4. Copy-paste the contents of `database/migrations/001_initial.sql`
 5. Click **Run**
+6. Repeat for `database/migrations/002_forecasting.sql` (forecast + evaluation tables)
 
 ### 2. Get Supabase Credentials
 
@@ -134,19 +146,57 @@ Fix any errors before deploying.
 - **Price Change**: Close_t - Close_t-1
 - **Percent Change**: (Price Change / Close_t-1) × 100
 
+## Forecasting Models
+
+Two standard models are fitted per stock on each pipeline run and forecast five
+trading days ahead.
+
+| Model | Approach |
+|-------|----------|
+| ARIMA | Fitted on log prices; `(p,d,q)` chosen by AIC over a small grid. Supplies 95% confidence intervals. |
+| XGBoost | Gradient-boosted trees predicting next-day **return** from lagged returns, moving-average ratios, rolling volatility, RSI(14), a stochastic oscillator and volume ratios. |
+
+Accuracy is measured with a walk-forward (expanding window) backtest over the
+last 30 trading days, so every prediction scored is out-of-sample. Reported per
+model: MAE, RMSE, MAPE and directional accuracy.
+
+A **random-walk baseline** ("tomorrow equals today") is measured over the same
+window. A model whose RMSE does not beat that baseline carries no predictive
+information, and the UI labels it as such rather than hiding the result. On the
+current dataset ARIMA beats the baseline on roughly 9 of 12 stocks by a narrow
+margin and XGBoost does not — which is the expected outcome for daily equity
+prices and is presented honestly rather than tuned away.
+
+The application shows numeric projections and error metrics only. It does not
+produce buy/sell/hold signals or any form of investment recommendation.
+
+## News Aggregation
+
+`/news` pulls headlines from publisher RSS feeds and matches them to tracked
+symbols by keyword. Only the title, source, timestamp and a link to the
+publisher are stored or displayed; article bodies are never copied, and every
+headline links back to the original site. Feeds are cached for 15 minutes.
+
 ## Project Structure
 
 ```
 marketpulse/
 ├── src/
 │   ├── app/              # Next.js pages & API routes
+│   │   ├── auth/callback # OAuth code exchange
+│   │   └── news/         # Stock news page
 │   ├── components/       # React components
 │   ├── lib/
 │   │   ├── db/          # Drizzle ORM schema
-│   │   └── supabase/    # Auth clients
+│   │   ├── supabase/    # Auth clients
+│   │   └── news.ts      # RSS aggregation
 │   ├── types/           # TypeScript types
 │   └── middleware.ts    # Auth middleware
-├── pipeline/            # Python data pipeline
+├── pipeline/
+│   ├── main.py          # Orchestration
+│   ├── forecast.py      # ARIMA + XGBoost models and backtests
+│   ├── metrics.py       # Financial metrics
+│   └── validator.py     # Data quality checks
 ├── database/            # SQL migrations
 ├── .github/workflows/   # GitHub Actions
 └── README.md
@@ -158,13 +208,23 @@ marketpulse/
 → Run the Python pipeline to populate the database.
 
 **Build fails with TypeScript errors**
-→ Run `npm run lint` and fix any issues.
+→ Run `npx tsc --noEmit` to see the errors, and `npm run lint` for lint issues.
 
 **Pipeline fails in GitHub Actions**
 → Check that `DATABASE_URL` secret is set correctly in GitHub.
 
 **Supabase connection errors**
-→ Use the **pooled connection string** (not the direct one).
+→ Use the **pooled connection string** (`*.pooler.supabase.com`), not the direct
+`db.*.supabase.co` host, which is IPv6-only.
+
+**"No forecast available yet" on a stock page**
+→ Models need at least 60 trading days of history. Confirm
+`002_forecasting.sql` has been run, then rerun the pipeline.
+
+**Google login returns a redirect error**
+→ Confirm the Supabase callback URL is listed as an authorised redirect URI in
+the Google Cloud console, and that the site URL and redirect URLs are set in
+Supabase → Authentication → URL Configuration.
 
 ## Student Information
 

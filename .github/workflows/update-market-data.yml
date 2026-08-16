@@ -27,6 +27,8 @@ jobs:
       - name: Run data pipeline
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Model fitting is CPU-bound; keep thread counts modest on the runner.
+          OMP_NUM_THREADS: '2'
         run: |
           cd pipeline
           python main.py
