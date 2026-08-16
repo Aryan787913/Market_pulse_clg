@@ -7,7 +7,7 @@ import { ExternalLink, Newspaper } from "lucide-react";
 
 interface NewsListProps {
   articles: NewsArticle[];
-  /** Tracked symbols available as filters. */
+  /** Tracked stocks, used to build the filter chips. */
   symbols: Array<{ symbol: string; company: string }>;
 }
 

@@ -163,8 +163,8 @@ model: MAE, RMSE, MAPE and directional accuracy.
 A **random-walk baseline** ("tomorrow equals today") is measured over the same
 window. A model whose RMSE does not beat that baseline carries no predictive
 information, and the UI labels it as such rather than hiding the result. On the
-current dataset ARIMA beats the baseline on roughly 9 of 12 stocks by a narrow
-margin and XGBoost does not — which is the expected outcome for daily equity
+current 50-stock dataset ARIMA beats the random walk on about 36 of 50 stocks by a
+narrow margin and XGBoost does not — which is the expected outcome for daily equity
 prices and is presented honestly rather than tuned away.
 
 The application shows numeric projections and error metrics only. It does not
@@ -173,9 +173,12 @@ produce buy/sell/hold signals or any form of investment recommendation.
 ## News Aggregation
 
 `/news` pulls headlines from publisher RSS feeds and matches them to tracked
-symbols by keyword. Only the title, source, timestamp and a link to the
-publisher are stored or displayed; article bodies are never copied, and every
-headline links back to the original site. Feeds are cached for 15 minutes.
+symbols by keyword. The tracked list is read from the `stocks` database table
+(the single source of truth, also used by the pipeline), with a small
+`EXTRA_ALIASES` map for well-known abbreviations (`RIL`, `HDFC Bank`, `Airtel`,
+...). Only the title, source, timestamp and a link to the publisher are stored or
+displayed; article bodies are never copied, and every headline links back to the
+original site. Feeds are cached for 15 minutes.
 
 ## Project Structure
 

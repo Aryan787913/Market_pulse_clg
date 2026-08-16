@@ -9,7 +9,7 @@ import traceback
 from datetime import datetime
 import yfinance as yf
 
-from config import STOCKS, DATABASE_URL
+from config import STOCKS, DATABASE_URL, FETCH_DELAY_SECONDS
 from database import Database
 from validator import DataValidator
 from metrics import calculate_metrics_for_stock
@@ -51,14 +51,18 @@ def run_pipeline():
     # Log pipeline start
     run_id = db.log_pipeline_run("running", 0, 0, 0, None, 0)
     
-    for stock_info in STOCKS:
+    for index, stock_info in enumerate(STOCKS):
         symbol = stock_info["symbol"]
         company_name = stock_info["company_name"]
         sector = stock_info.get("sector")
         exchange = stock_info.get("exchange")
-        
-        print(f"\n[{symbol}] {company_name}...")
-        
+
+        print(f"\n[{index + 1}/{len(STOCKS)}] {symbol} - {company_name}")
+
+        # Space out requests so Yahoo Finance does not start rejecting them.
+        if index > 0 and FETCH_DELAY_SECONDS > 0:
+            time.sleep(FETCH_DELAY_SECONDS)
+
         try:
             # Step 1: Get or create stock record
             stock_id = db.get_or_create_stock(symbol, company_name, sector, exchange)
@@ -217,7 +221,14 @@ def run_pipeline():
     print(f"Status: {status}")
     print(f"Stocks processed: {stocks_processed}/{len(STOCKS)}")
     print(f"Records inserted: {records_inserted}")
-    
+
+    if all_errors:
+        print(f"Errors: {len(all_errors)}")
+        for message in all_errors[:10]:
+            print(f"  - {message}")
+        if len(all_errors) > 10:
+            print(f"  ... and {len(all_errors) - 10} more")
+
     return status == "success" or status == "partial"
 
 if __name__ == "__main__":

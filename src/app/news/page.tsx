@@ -1,9 +1,13 @@
-import { getMarketNews, TRACKED_STOCKS } from "@/lib/news";
+import { db } from "@/lib/db";
+import { stocks } from "@/lib/db/schema";
+import { getMarketNews } from "@/lib/news";
 import { NewsList } from "@/components/news-list";
 import { Newspaper } from "lucide-react";
 
-// Headlines are fetched server-side and cached for 15 minutes.
-export const revalidate = 900;
+// Reads the tracked stock list from the database, so this must not be
+// prerendered at build time. Headlines themselves are cached for 15 minutes
+// by the RSS fetch layer.
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Stock News - MarketPulse",
@@ -11,8 +15,12 @@ export const metadata = {
 };
 
 export default async function NewsPage() {
-  // Market-wide feed, tagged with any tracked symbol mentioned in the headline.
-  const articles = await getMarketNews(false);
+  const tracked = await db
+    .select({ symbol: stocks.symbol, company: stocks.companyName })
+    .from(stocks)
+    .orderBy(stocks.symbol);
+
+  const articles = await getMarketNews(tracked, false);
   const tagged = articles.filter((article) => article.symbols.length > 0);
 
   return (
@@ -20,7 +28,8 @@ export default async function NewsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">Stock News</h1>
         <p className="mt-1 text-muted-foreground">
-          Headlines for the 12 tracked NSE stocks, refreshed every 15 minutes
+          Headlines for the {tracked.length} tracked NSE stocks, refreshed every
+          15 minutes
         </p>
       </div>
 
@@ -37,10 +46,7 @@ export default async function NewsPage() {
           <p className="mb-4 text-sm text-muted-foreground">
             {tagged.length} of {articles.length} headlines mention a tracked stock.
           </p>
-          <NewsList
-            articles={articles}
-            symbols={TRACKED_STOCKS.map(({ symbol, company }) => ({ symbol, company }))}
-          />
+          <NewsList articles={articles} symbols={tracked} />
         </>
       )}
 
