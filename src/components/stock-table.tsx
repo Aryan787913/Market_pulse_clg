@@ -3,20 +3,30 @@
 import Link from "next/link";
 import { StockWithPrice } from "@/types";
 import { formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
-import { TrendingUp, TrendingDown, ArrowUpDown } from "lucide-react";
-import { useState } from "react";
+import { TrendingUp, TrendingDown, ArrowUpDown, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 
 interface StockTableProps {
   stocks: StockWithPrice[];
   showWatchlistActions?: boolean;
   onRemove?: (stockId: number) => void;
+  /** Show a search box + sector filter above the table (dashboard use). */
+  filterable?: boolean;
 }
 
-export function StockTable({ stocks, showWatchlistActions, onRemove }: StockTableProps) {
+export function StockTable({ stocks, showWatchlistActions, onRemove, filterable }: StockTableProps) {
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" }>({
     key: "symbol",
     direction: "asc",
   });
+  const [query, setQuery] = useState("");
+  const [sector, setSector] = useState("ALL");
+
+  const sectors = useMemo(
+    () =>
+      Array.from(new Set(stocks.map((s) => s.sector).filter(Boolean))).sort() as string[],
+    [stocks]
+  );
 
   const handleSort = (key: string) => {
     setSortConfig((current) => ({
@@ -55,8 +65,46 @@ export function StockTable({ stocks, showWatchlistActions, onRemove }: StockTabl
     return sortConfig.direction === "asc" ? valA - valB : valB - valA;
   });
 
+  const visible = sorted.filter((stock) => {
+    const q = query.trim().toLowerCase();
+    const matchesQuery =
+      !q ||
+      stock.symbol.toLowerCase().includes(q) ||
+      stock.companyName.toLowerCase().includes(q);
+    const matchesSector = sector === "ALL" || stock.sector === sector;
+    return matchesQuery && matchesSector;
+  });
+
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
+      {filterable && (
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search symbol or company"
+              className="w-full rounded-md border bg-background px-9 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <select
+            value={sector}
+            onChange={(e) => setSector(e.target.value)}
+            className="rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="ALL">All sectors</option>
+            {sectors.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground sm:whitespace-nowrap">
+            {visible.length} of {stocks.length}
+          </span>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -87,7 +135,7 @@ export function StockTable({ stocks, showWatchlistActions, onRemove }: StockTabl
             </tr>
           </thead>
           <tbody>
-            {sorted.map((stock) => {
+            {visible.map((stock) => {
               const change = stock.latestMetric?.percentChange
                 ? parseFloat(stock.latestMetric.percentChange)
                 : null;
@@ -135,6 +183,16 @@ export function StockTable({ stocks, showWatchlistActions, onRemove }: StockTabl
                 </tr>
               );
             })}
+            {visible.length === 0 && (
+              <tr>
+                <td
+                  colSpan={showWatchlistActions ? 7 : 6}
+                  className="px-4 py-8 text-center text-sm text-muted-foreground"
+                >
+                  No stocks match your filters.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -219,7 +219,7 @@ export default async function HomePage() {
 
       <div>
         <h2 className="text-lg font-semibold mb-4">All Stocks</h2>
-        <StockTable stocks={data.allStocks} />
+        <StockTable stocks={data.allStocks} filterable />
       </div>
     </div>
   );

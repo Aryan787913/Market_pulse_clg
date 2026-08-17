@@ -14,8 +14,10 @@ import {
   X,
   Newspaper,
   Database,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -51,6 +53,7 @@ export function Navbar() {
     { href: "/search", label: "Search", icon: Search },
     { href: "/news", label: "News", icon: Newspaper },
     { href: "/data", label: "Data", icon: Database },
+    { href: "/pipeline", label: "Pipeline", icon: Activity },
   ];
 
   const authLinks = user
@@ -106,15 +109,17 @@ export function Navbar() {
               Login
             </Link>
           )}
+
+          <ThemeToggle />
         </div>
 
-        {/* Mobile toggle */}
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden p-2"
-        >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        {/* Mobile controls */}
+        <div className="flex items-center gap-1 md:hidden">
+          <ThemeToggle />
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2">
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Nav */}
