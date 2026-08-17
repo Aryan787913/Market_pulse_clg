@@ -13,6 +13,7 @@ import { PriceChart } from "@/components/price-chart";
 import { VolumeChart } from "@/components/volume-chart";
 import { ForecastChart } from "@/components/forecast-chart";
 import { ModelMetrics } from "@/components/model-metrics";
+import { WatchlistButton } from "@/components/watchlist-button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { subDays } from "date-fns";
@@ -192,6 +193,9 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
               {stock.exchange}
             </span>
           )}
+        </div>
+        <div className="mt-4">
+          <WatchlistButton stockId={stock.stockId} />
         </div>
       </div>
 

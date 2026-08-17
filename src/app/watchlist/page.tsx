@@ -90,7 +90,7 @@ export default function WatchlistPage() {
       ) : (
         <div className="rounded-xl border bg-card p-8 text-center">
           <Heart className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-muted-foreground">Your watchlist is empty. Search for stocks to add them.</p>
+          <p className="text-muted-foreground">Your watchlist is empty. Open any stock and tap &ldquo;Add to Watchlist&rdquo; to save it here.</p>
         </div>
       )}
     </div>
