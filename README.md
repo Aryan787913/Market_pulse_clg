@@ -24,6 +24,8 @@ GitHub Actions (Python + yfinance + statsmodels/XGBoost)
 - Price forecasting using ARIMA and XGBoost, reported alongside walk-forward
   backtest error and a random-walk skill comparison
 - Stock news page aggregating publisher RSS headlines, filterable by symbol
+- Public data export (`/data`): download CSV/JSON or connect the dataset live to
+  Excel/Power BI/Tableau, no account needed
 - Email/password and Google (OAuth) authentication via Supabase
 - Watchlist for authenticated users
 
@@ -182,6 +184,28 @@ symbols by keyword. The tracked list is read from the `stocks` database table
 ...). Only the title, source, timestamp and a link to the publisher are stored or
 displayed; article bodies are never copied, and every headline links back to the
 original site. Feeds are cached for 15 minutes.
+
+## Public Data Export (`/data`)
+
+Any visitor can pull the cleaned dataset into their own tools — no login or API
+key. The `/data` page builds a URL and offers a one-click CSV/JSON download; the
+same URL can be pasted into Excel/Power BI/Tableau's "From Web" connector for a
+live, refreshable feed.
+
+Endpoint: `GET /api/export?dataset=<name>&symbol=<SYMBOL>&format=<csv|json>`
+
+| Param | Values | Notes |
+|-------|--------|-------|
+| `dataset` | `daily` (default), `prices`, `metrics`, `forecasts`, `stocks` | `daily` = prices joined with metrics |
+| `symbol` | e.g. `RELIANCE.NS` | Omit for all stocks |
+| `format` | `csv` (default), `json` | CSV sets a download filename |
+
+Responses are CDN-cached for an hour and expose only public market data — never
+the `profiles`/`watchlist` tables. Example:
+`/api/export?dataset=daily&symbol=TCS.NS&format=csv`.
+
+This is the self-serve option. To connect a BI tool straight to the database
+instead, see below.
 
 ## Connecting BI Tools (Excel / Power BI / Tableau)
 

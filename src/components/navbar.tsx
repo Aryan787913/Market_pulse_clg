@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Newspaper,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,7 @@ export function Navbar() {
     { href: "/", label: "Dashboard", icon: TrendingUp },
     { href: "/search", label: "Search", icon: Search },
     { href: "/news", label: "News", icon: Newspaper },
+    { href: "/data", label: "Data", icon: Database },
   ];
 
   const authLinks = user
