@@ -91,6 +91,10 @@ export default async function HomePage() {
         <p className="mt-1 text-muted-foreground">
           Real-time insights into the Indian stock market
         </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Prices refresh every weekday around 7:00 PM IST, after the NSE close.
+          Weekends and market holidays show the last trading day.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
