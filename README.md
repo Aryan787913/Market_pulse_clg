@@ -56,6 +56,9 @@ The project is designed to operate at ₹0/month using free-tier/free services, 
 4. Copy-paste the contents of `database/migrations/001_initial.sql`
 5. Click **Run**
 6. Repeat for `database/migrations/002_forecasting.sql` (forecast + evaluation tables)
+7. Optional: run `database/migrations/003_bi_layer.sql` for the read-only BI
+   role and analytics views (see "Connecting BI Tools" below). Edit the password
+   in the file first.
 
 ### 2. Get Supabase Credentials
 
@@ -179,6 +182,41 @@ symbols by keyword. The tracked list is read from the `stocks` database table
 ...). Only the title, source, timestamp and a link to the publisher are stored or
 displayed; article bodies are never copied, and every headline links back to the
 original site. Feeds are cached for 15 minutes.
+
+## Connecting BI Tools (Excel / Power BI / Tableau)
+
+Because the data lives in PostgreSQL, external BI tools can connect directly to
+the same database and build dashboards alongside the web app. Run
+`database/migrations/003_bi_layer.sql` first — it creates a read-only role
+`bi_readonly` (no access to the `profiles`/`watchlist` PII tables) and flat,
+ready-to-chart views.
+
+**Connection settings** (use the IPv4 pooler in *session* mode, port 5432):
+
+| Setting | Value |
+|---------|-------|
+| Host | `aws-0-<region>.pooler.supabase.com` |
+| Port | `5432` (session mode; needed for BI tools' prepared statements) |
+| Database | `postgres` |
+| User | `bi_readonly.<project-ref>` |
+| Password | the password you set in `003_bi_layer.sql` |
+| SSL | required |
+
+**Views provided:**
+
+| View | Use |
+|------|-----|
+| `v_stock_daily` | One row per stock per day (prices + metrics) — main time-series fact table |
+| `v_latest_snapshot` | Latest day per stock — KPI tiles / current price |
+| `v_sector_performance` | Sector roll-up of the latest snapshot |
+| `v_forecast` | Latest ARIMA + XGBoost forecasts per stock |
+| `v_forecast_accuracy` | Backtest error per model, with a `beats_random_walk` flag |
+| `v_pipeline_health` | Recent pipeline runs (data freshness) |
+
+Use **Import** mode with a scheduled refresh rather than DirectQuery; the dataset
+is small and this keeps the free-tier egress negligible. Power BI Service
+scheduled refresh of PostgreSQL requires the on-premises data gateway (personal
+mode); desktop refresh needs no gateway.
 
 ## Project Structure
 
