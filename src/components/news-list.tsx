@@ -9,6 +9,8 @@ interface NewsListProps {
   articles: NewsArticle[];
   /** Tracked stocks, used to build the filter chips. */
   symbols: Array<{ symbol: string; company: string }>;
+  /** Show the per-stock filter chip bar (default true). */
+  showFilters?: boolean;
 }
 
 function relativeTime(iso: string | null): string {
@@ -27,7 +29,7 @@ function relativeTime(iso: string | null): string {
   return days === 1 ? "yesterday" : `${days}d ago`;
 }
 
-export function NewsList({ articles, symbols }: NewsListProps) {
+export function NewsList({ articles, symbols, showFilters = true }: NewsListProps) {
   const [active, setActive] = useState<string>("ALL");
 
   const visible =
@@ -37,6 +39,7 @@ export function NewsList({ articles, symbols }: NewsListProps) {
 
   return (
     <div>
+      {showFilters && (
       <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filter by stock">
         <button
           onClick={() => setActive("ALL")}
@@ -68,12 +71,13 @@ export function NewsList({ articles, symbols }: NewsListProps) {
           );
         })}
       </div>
+      )}
 
       {visible.length === 0 ? (
         <div className="rounded-xl border bg-card p-8 text-center">
           <Newspaper className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
           <p className="text-muted-foreground">
-            No headlines matched this filter right now. Feeds refresh every 15 minutes.
+            No recent headlines found right now. Feeds refresh every 15 minutes.
           </p>
         </div>
       ) : (

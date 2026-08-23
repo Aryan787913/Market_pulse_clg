@@ -14,7 +14,9 @@ import { VolumeChart } from "@/components/volume-chart";
 import { ForecastChart } from "@/components/forecast-chart";
 import { ModelMetrics } from "@/components/model-metrics";
 import { WatchlistButton } from "@/components/watchlist-button";
-import { ArrowLeft } from "lucide-react";
+import { NewsList } from "@/components/news-list";
+import { getNewsForSymbol } from "@/lib/news";
+import { ArrowLeft, Newspaper } from "lucide-react";
 import Link from "next/link";
 import { subDays } from "date-fns";
 
@@ -116,6 +118,9 @@ async function getStockData(symbol: string) {
         .orderBy(modelEvaluations.modelName)
     : [];
 
+  // Latest headlines for this specific stock (RSS, cached 15 min at fetch layer).
+  const news = await getNewsForSymbol(stockData.symbol, stockData.companyName);
+
   return {
     stock: stockData,
     prices,
@@ -128,6 +133,7 @@ async function getStockData(symbol: string) {
     forecasts,
     evaluations,
     forecastTrainedOn: latestRun?.trainedOn ?? null,
+    news,
   };
 }
 
@@ -150,6 +156,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     forecasts,
     evaluations,
     forecastTrainedOn,
+    news,
   } = data;
   const change = latestMetric?.percentChange ? parseFloat(latestMetric.percentChange) : null;
   const isPositive = (change ?? 0) >= 0;
@@ -309,6 +316,32 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
           </div>
         </div>
       </div>
+
+      <section className="mb-8" aria-labelledby="news-heading">
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <h2 id="news-heading" className="flex items-center gap-2 text-lg font-semibold">
+              <Newspaper className="h-5 w-5 text-primary" />
+              Latest News: {stock.symbol.replace(".NS", "")}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Recent headlines mentioning {stock.companyName}. Each link opens on
+              the publisher&apos;s own site.
+            </p>
+          </div>
+          <Link
+            href="/news"
+            className="shrink-0 text-sm font-medium text-primary hover:underline"
+          >
+            All news &rarr;
+          </Link>
+        </div>
+        <NewsList
+          articles={news.map((a) => ({ ...a, symbols: [] }))}
+          symbols={[]}
+          showFilters={false}
+        />
+      </section>
 
       <div className="rounded-xl border bg-muted/30 p-4">
         <p className="text-xs text-muted-foreground">
