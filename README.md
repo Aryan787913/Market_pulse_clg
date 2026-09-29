@@ -1,5 +1,9 @@
 # MarketPulse - Automated Stock Market Data Pipeline & Analytics Dashboard
 
+🚀 **Live demo:** https://market-pulse-clg.vercel.app/
+
+> **Status (Sep 2026):** the scheduled data pipeline is under maintenance — a few dashboard panels may show stale data until the ETL repair lands.
+
 A full-stack final-year project that automates stock market data collection, validation, transformation, and visualization.
 
 ## Architecture
@@ -139,8 +143,8 @@ Fix any errors before deploying.
 | LT.NS | Larsen & Toubro | Industrials |
 | AXISBANK.NS | Axis Bank | Financial Services |
 | BHARTIARTL.NS | Bharti Airtel | Telecommunications |
-| HINDUNILVR.NS | Hindustan Unilever | Consumer Goods |
-| KOTAKBANK.NS | Kotak Mahindra Bank | Financial Services |
+| INFY.NS | Hindustan Unilever | Consumer Goods |
+| KOTAKBANK.NS | Kotak Mahindra | Financial Services |
 
 ## Metrics Calculated
 
@@ -232,9 +236,6 @@ ready-to-chart views.
 |------|-----|
 | `v_stock_daily` | One row per stock per day (prices + metrics) — main time-series fact table |
 | `v_latest_snapshot` | Latest day per stock — KPI tiles / current price |
-| `v_sector_performance` | Sector roll-up of the latest snapshot |
-| `v_forecast` | Latest ARIMA + XGBoost forecasts per stock |
-| `v_forecast_accuracy` | Backtest error per model, with a `beats_random_walk` flag |
 | `v_pipeline_health` | Recent pipeline runs (data freshness) |
 
 Use **Import** mode with a scheduled refresh rather than DirectQuery; the dataset
@@ -250,17 +251,10 @@ marketpulse/
 │   ├── app/              # Next.js pages & API routes
 │   │   ├── auth/callback # OAuth code exchange
 │   │   └── news/         # Stock news page
-│   ├── components/       # React components
-│   ├── lib/
-│   │   ├── db/          # Drizzle ORM schema
-│   │   ├── supabase/    # Auth clients
-│   │   └── news.ts      # RSS aggregation
-│   ├── types/           # TypeScript types
-│   └── middleware.ts    # Auth middleware
 ├── pipeline/
 │   ├── main.py          # Orchestration
 │   ├── forecast.py      # ARIMA + XGBoost models and backtests
-│   ├── metrics.py       # Financial metrics
+│   ├── metrics.py      # Financial metrics
 │   └── validator.py     # Data quality checks
 ├── database/            # SQL migrations
 ├── .github/workflows/   # GitHub Actions
