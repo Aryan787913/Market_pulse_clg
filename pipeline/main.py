@@ -237,6 +237,10 @@ def run_pipeline():
     print(f"Records inserted: {records_inserted}")
 
     if all_errors:
+        # Surface the first few errors as GitHub Actions annotations so they show
+        # on the run summary without opening the raw logs.
+        for message in all_errors[:5]:
+            print(f"::error::{message[:300]}")
         print(f"Errors: {len(all_errors)}")
         for message in all_errors[:10]:
             print(f"  - {message}")
