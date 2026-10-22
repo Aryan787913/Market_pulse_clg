@@ -2,6 +2,21 @@
 import psycopg2
 from psycopg2.extras import execute_values
 import os
+import numpy as np
+from psycopg2.extensions import register_adapter, AsIs
+
+# NumPy 2 changed scalar repr to "np.float64(1.5)", which psycopg2 would
+# otherwise render into SQL literally (error: schema "np" does not exist).
+# Adapt NumPy scalars to plain Python values before they reach the query.
+def _adapt_numpy_scalar(value):
+    if isinstance(value, float) or isinstance(value, np.floating):
+        if np.isnan(value):
+            return AsIs("NULL")
+        return AsIs(repr(float(value)))
+    return AsIs(repr(int(value)))
+
+for _t in (np.float64, np.float32, np.int64, np.int32):
+    register_adapter(_t, _adapt_numpy_scalar)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
