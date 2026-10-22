@@ -15,20 +15,30 @@ from validator import DataValidator
 from metrics import calculate_metrics_for_stock
 from forecast import run_models, FORECAST_HORIZON
 
-def fetch_stock_data(symbol, period="2y"):
+def fetch_stock_data(symbol, period="2y", attempts=4):
     """Fetch historical stock data from Yahoo Finance.
 
     Two years gives the forecasting models enough observations to train on and
     makes the 52-week high/low genuinely reflect 52 weeks.
+
+    Yahoo Finance sometimes rate-limits or returns an empty frame for shared
+    CI runners, so retry with a growing back-off before giving up.
     """
-    try:
-        ticker = yf.Ticker(symbol)
-        data = ticker.history(period=period)
-        if data.empty:
-            return None, f"No data returned for {symbol}"
-        return data, None
-    except Exception as e:
-        return None, f"Error fetching {symbol}: {str(e)}"
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            ticker = yf.Ticker(symbol)
+            data = ticker.history(period=period)
+            if data is not None and not data.empty:
+                return data, None
+            last_error = f"No data returned for {symbol}"
+        except Exception as e:
+            last_error = f"Error fetching {symbol}: {type(e).__name__}: {str(e)[:150]}"
+        if attempt < attempts:
+            wait = 5 * attempt
+            print(f"    attempt {attempt} failed ({last_error}); retrying in {wait}s")
+            time.sleep(wait)
+    return None, last_error
 
 def run_pipeline():
     """Execute the full data pipeline"""
@@ -212,6 +222,10 @@ def run_pipeline():
     duration = round(time.time() - start_time, 2)
     status = "success" if stocks_processed == len(STOCKS) else "partial" if stocks_processed > 0 else "failed"
     errors_str = "; ".join(all_errors) if all_errors else None
+    # pipeline_runs.errors is VARCHAR(2000); an over-long string made the final
+    # UPDATE fail, leaving runs stuck as "running" with no error recorded.
+    if errors_str and len(errors_str) > 2000:
+        errors_str = errors_str[:1980] + " ...(truncated)"
     
     db.update_pipeline_run(run_id, status, stocks_processed, records_inserted, errors_str, duration)
     db.close()
